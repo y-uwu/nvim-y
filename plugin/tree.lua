@@ -15,7 +15,7 @@
 --   <CR> open    <C-v> open in a split to the right    <C-x> split below
 --   a new file/folder (end with / for a folder)    r rename    d delete
 --   c copy  x cut  p paste    H show dotfiles    I show git-ignored files
---   - go up a directory    <C-]> make folder under cursor the root
+--   <C-]> make the folder under the cursor the project    - go up a level
 
 vim.pack.add({
   { src = 'https://github.com/nvim-tree/nvim-tree.lua', version = vim.version.range('1') },
@@ -95,6 +95,9 @@ require('nvim-tree').setup({
   view = { width = 32, preserve_window_proportions = true },
   actions = {
     open_file = { window_picker = { picker = pick_window } },
+    -- <C-]> on a folder (or - to go up) makes it the project for everything:
+    -- file finder, grep and new terminals, not just the tree window.
+    change_dir = { global = true },
   },
   renderer = {
     root_folder_label = function(path) return vim.fn.fnamemodify(path, ':t') .. '/' end,
