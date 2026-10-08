@@ -1,0 +1,14 @@
+{
+  "plugins": {
+    "mini.nvim": {
+      "rev": "1345d191bb3da9c7b0e977f4387c5761f9bff68d",
+      "src": "https://github.com/nvim-mini/mini.nvim",
+      "version": ">=0.0.0"
+    },
+    "nvim-tree.lua": {
+      "rev": "531b807b8f0d6f75016a0ee1e0cd5ce2086e9d95",
+      "src": "https://github.com/nvim-tree/nvim-tree.lua",
+      "version": "1.0.0 - 2.0.0"
+    }
+  }
+}
