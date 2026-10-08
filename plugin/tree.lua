@@ -5,8 +5,8 @@
 --
 -- Opening a project:
 --   nvim ~/some/project     from the shell: tree on the left, empty editor
---   <Space>o                from inside Neovim: switch to another folder
 --   <Space>e                show the tree, jump to it, or hide it
+--   (switching projects and recent projects: plugin/projects.lua)
 --
 -- Mouse: one click on a folder opens/closes it, one click on a file opens it
 -- in the editor you used last. Double-clicking does the same thing.
@@ -188,19 +188,3 @@ vim.keymap.set('n', '<leader>e', function()
     api.tree.toggle({ find_file = true })
   end
 end, { desc = 'File tree (open / jump / hide)' })
-
--- Switch projects: type or Tab-complete a folder path, Enter to open it.
--- The file finder (<Space>ff) and grep (<Space>fg) then search that folder.
-vim.keymap.set('n', '<leader>o', function()
-  vim.ui.input({ prompt = 'Open folder: ', default = vim.fn.getcwd() .. '/', completion = 'dir' },
-    function(input)
-      if not input or input == '' then return end
-      local dir = vim.fn.fnamemodify(vim.fn.expand(input), ':p')
-      if vim.fn.isdirectory(dir) == 0 then
-        vim.notify('Not a folder: ' .. dir, vim.log.levels.WARN)
-        return
-      end
-      vim.cmd.cd(vim.fn.fnameescape(dir))
-      require('nvim-tree.api').tree.open({ path = dir })
-    end)
-end, { desc = 'Open folder (switch project)' })

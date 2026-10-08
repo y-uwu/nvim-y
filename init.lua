@@ -369,7 +369,9 @@ vim.api.nvim_create_autocmd('TermOpen', {
     -- Start typing in the new terminal, unless focus has already moved on
     local win = vim.api.nvim_get_current_win()
     vim.schedule(function()
-      if vim.api.nvim_get_current_win() == win then vim.cmd.startinsert() end
+      if vim.api.nvim_get_current_win() == win and vim.bo.buftype == 'terminal' then
+        vim.cmd.startinsert()
+      end
     end)
   end,
 })

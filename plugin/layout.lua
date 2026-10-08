@@ -28,15 +28,115 @@ end
 ---------------------------------------------------------------------------
 -- 1. Open files as tabs
 ---------------------------------------------------------------------------
--- Click a tab to switch to it. [b and ]b (built in) step through them.
-require('mini.tabline').setup({ show_icons = false })
+-- Click a tab to switch to it, middle-click to close it. [b and ]b (built
+-- in) step through them.
+--
+-- Closing a file never closes Neovim, a split, the tree or a panel: the
+-- window stays and shows your previous file, or an empty editor if that was
+-- the last one. :q is still "quit" as in vim.
+require('mini.tabline').setup({
+  show_icons = false,
+  -- An empty editor shows as [No Name] (mini's default is *, which looks
+  -- like an unsaved-changes marker).
+  format = function(_, label)
+    if label:sub(1, 1) == '*' then label = '[No Name]' end
+    return ' ' .. label .. ' '
+  end,
+})
 require('mini.bufremove').setup()
 
-map('n', '<leader>bd', function() MiniBufremove.delete() end, 'Close file (keep window)')
+-- Opening a file clears away empty [No Name] editors left behind by closing
+-- the last file (only empty ones that aren't on screen anywhere).
+vim.api.nvim_create_autocmd('BufEnter', {
+  group = aug,
+  callback = function(ev)
+    if vim.bo[ev.buf].buftype ~= '' or vim.api.nvim_buf_get_name(ev.buf) == '' then return end
+    vim.schedule(function()
+      for _, b in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.bo[b].buflisted and vim.bo[b].buftype == '' and not vim.bo[b].modified
+          and vim.api.nvim_buf_get_name(b) == '' and #vim.fn.win_findbuf(b) == 0
+          and vim.api.nvim_buf_line_count(b) == 1
+          and vim.api.nvim_buf_get_lines(b, 0, 1, false)[1] == '' then
+          pcall(vim.api.nvim_buf_delete, b, {})
+        end
+      end
+    end)
+  end,
+})
+
+local function is_editor(win)
+  return vim.api.nvim_win_get_config(win).relative == ''
+    and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == ''
+end
+
+-- The editor window to act on: this one, or (from the tree or a panel) the
+-- editor you were in last.
+local function editor_window()
+  local cur = vim.api.nvim_get_current_win()
+  if is_editor(cur) then return cur end
+  local prev = vim.fn.win_getid(vim.fn.winnr('#'))
+  if prev ~= 0 and is_editor(prev) then return prev end
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if is_editor(win) then return win end
+  end
+end
+
+local function close_file(buf)
+  if not buf then
+    local win = editor_window()
+    if not win then return end
+    buf = vim.api.nvim_win_get_buf(win)
+  end
+  if not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].buftype ~= '' then return end
+  if vim.bo[buf].modified then
+    local name = vim.api.nvim_buf_get_name(buf)
+    if name == '' then
+      if vim.fn.confirm('Close this new file without saving it?', '&Discard\n&Cancel', 2) ~= 1 then
+        return
+      end
+    else
+      local choice = vim.fn.confirm('Save changes to ' .. vim.fn.fnamemodify(name, ':.') .. '?',
+        '&Save\n&Discard\n&Cancel', 1)
+      if choice == 1 then
+        local ok, err = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd('write') end)
+        if not ok then
+          vim.notify(err, vim.log.levels.ERROR)
+          return
+        end
+      elseif choice ~= 2 then
+        return
+      end
+    end
+  end
+  MiniBufremove.delete(buf, true)
+end
+
+-- Clicking a tab shows that file in the editor, even if you're in the tree
+-- or a panel (instead of replacing the tree or terminal with it).
+local function show_file(buf)
+  local win = editor_window()
+  if not win then return end
+  vim.api.nvim_set_current_win(win)
+  vim.api.nvim_win_set_buf(win, buf)
+end
+
+_G.YLayout = { close_file = close_file, show_file = show_file }
+vim.cmd([[
+  function! MiniTablineSwitchBuffer(buf_id, clicks, button, mod)
+    if a:button ==# 'm'
+      call v:lua.YLayout.close_file(a:buf_id)
+    else
+      call v:lua.YLayout.show_file(a:buf_id)
+    endif
+  endfunction
+]])
+
+map('n', '<leader>bd', function() close_file() end, 'Close file')
 map('n', '<leader>bo', function()
-  local cur = vim.api.nvim_get_current_buf()
+  local win = editor_window()
+  local keep = win and vim.api.nvim_win_get_buf(win)
   for _, b in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.bo[b].buflisted and b ~= cur then MiniBufremove.delete(b) end
+    if vim.bo[b].buflisted and b ~= keep then close_file(b) end
   end
 end, 'Close other files')
 
@@ -46,7 +146,14 @@ end, 'Close other files')
 -- Drag a split border with the mouse to resize it.
 map('n', '<leader>wv', '<Cmd>vsplit<CR>', 'Split right')
 map('n', '<leader>ws', '<Cmd>split<CR>', 'Split below')
-map('n', '<leader>wc', '<Cmd>close<CR>', 'Close this split')
+map('n', '<leader>wc', function()
+  local editors = vim.tbl_filter(is_editor, vim.api.nvim_tabpage_list_wins(0))
+  if is_editor(vim.api.nvim_get_current_win()) and #editors == 1 then
+    close_file()                     -- the last split keeps its place, just empties
+  else
+    vim.cmd('close')
+  end
+end, 'Close this split')
 map('n', '<leader>w=', '<C-w>=', 'Even out split sizes')
 
 ---------------------------------------------------------------------------
@@ -72,10 +179,14 @@ local function is_running(p)
 end
 
 -- Enter terminal mode in `win`, but only if it's still the current window
--- once Neovim gets there (avoids starting insert in the wrong window).
+-- and still shows a terminal once Neovim gets there. (A split made from a
+-- panel briefly shows the panel's buffer; this keeps that new window out of
+-- insert mode.)
 local function insert_in(win)
   vim.schedule(function()
-    if vim.api.nvim_get_current_win() == win and vim.api.nvim_get_mode().mode:sub(1, 1) == 'n' then
+    if vim.api.nvim_get_current_win() == win
+      and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == 'terminal'
+      and vim.api.nvim_get_mode().mode:sub(1, 1) == 'n' then
       vim.cmd.startinsert()
     end
   end)
@@ -108,11 +219,17 @@ local function attach(name)
       vim.keymap.set('t', '<Esc>', '<Esc>', { buffer = p.buf, nowait = true })
     end
   end
-  local wo = vim.wo[p.win]
-  wo.winfixheight = name == 'term'
-  wo.winfixwidth = name == 'agent'
-  wo.number, wo.relativenumber, wo.signcolumn = false, false, 'no'
-  wo.winbar = p.label
+  -- Set these on the panel window only (like :setlocal), so your defaults
+  -- for other windows stay untouched.
+  local function setlocal(opt, value)
+    vim.api.nvim_set_option_value(opt, value, { win = p.win, scope = 'local' })
+  end
+  setlocal('winfixheight', name == 'term')
+  setlocal('winfixwidth', name == 'agent')
+  setlocal('number', false)
+  setlocal('relativenumber', false)
+  setlocal('signcolumn', 'no')
+  setlocal('winbar', p.label)
 end
 
 local function show(name, focus)
