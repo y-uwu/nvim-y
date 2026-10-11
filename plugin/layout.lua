@@ -33,7 +33,8 @@ end
 --
 -- Closing a file never closes Neovim, a split, the tree or a panel: the
 -- window stays and shows your previous file, or an empty editor if that was
--- the last one. :q is still "quit" as in vim.
+-- the last one. :q closes the current file too while other files are open
+-- (see below), and quits only on the last one.
 require('mini.tabline').setup({
   show_icons = false,
   -- An empty editor shows as [No Name] (mini's default is *, which looks
@@ -130,6 +131,55 @@ vim.cmd([[
     endif
   endfunction
 ]])
+
+-- :q, :wq, :x and :q! on your only editor window close the current file
+-- when other files are open, instead of quitting Neovim. Everywhere else
+-- they do what vim does: close a split, close the tree or a panel, or quit
+-- when it's the last file. :qa always quits.
+local function closes_file_instead()
+  local win = vim.api.nvim_get_current_win()
+  if not is_editor(win) then return false end
+  if #vim.tbl_filter(is_editor, vim.api.nvim_tabpage_list_wins(0)) > 1 then return false end
+  local cur = vim.api.nvim_get_current_buf()
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if b ~= cur and vim.bo[b].buflisted and vim.bo[b].buftype == '' then return true end
+  end
+  return false
+end
+
+local quit_cmds = {
+  q = 'q', quit = 'q', ['q!'] = 'q!', ['quit!'] = 'q!',
+  wq = 'wq', ['wq!'] = 'wq!', x = 'x', xit = 'x', exit = 'x',
+}
+
+local function quit_file(which)
+  local buf = vim.api.nvim_get_current_buf()
+  local save = ({ wq = 'write', ['wq!'] = 'write!', x = 'update' })[which]
+  if save then
+    local ok, err = pcall(vim.cmd, save)
+    if not ok then
+      vim.notify(err, vim.log.levels.ERROR)
+      return
+    end
+  end
+  if which == 'q!' then
+    MiniBufremove.delete(buf, true)
+  else
+    close_file(buf)
+  end
+end
+_G.YLayout.quit_file = quit_file
+
+-- Checked when you press Enter on the : line; any other command runs as typed.
+vim.keymap.set('c', '<CR>', function()
+  if vim.fn.getcmdtype() == ':' then
+    local which = quit_cmds[vim.trim(vim.fn.getcmdline())]
+    if which and closes_file_instead() then
+      return ('<C-u>lua YLayout.quit_file(%q)<CR>'):format(which)
+    end
+  end
+  return '<CR>'
+end, { expr = true, desc = ':q closes the file when other files are open' })
 
 map('n', '<leader>bd', function() close_file() end, 'Close file')
 map('n', '<leader>bo', function()

@@ -52,6 +52,8 @@ built-in ones worth knowing are at the end.
 | `<Space>fp` | Recent projects |
 | `<Space>bd` | Close the current file (never closes Neovim or a panel) |
 | `<Space>bo` | Close all other files |
+| `:q` / `:wq` / `:q!` | With other files open: close this file (`:wq` saves first, `:q!` discards). On the last file: quit |
+| `:qa` | Quit Neovim |
 
 ### Find
 
@@ -177,25 +179,8 @@ create one, delete a line to delete it. Press `=` to apply.
 
 ## Sessions
 
-Quitting saves the files and splits you had open for the project folder;
-opening that folder again (`nvim ~/projects/ws`, `<Space>o` or
-`<Space>fp`) brings them back. Quick edits (`nvim somefile`) and plain
-`nvim` don't save anything. Session files live in
-`~/.local/state/nvim/sessions/`, never inside a project. `:q` on the last
-editor window still quits Neovim, as in vim.
-
-## Built into Neovim (not this config, but handy)
-
-| Key | Action |
-|---|---|
-| `K` | Hover documentation |
-| `grn` / `gra` | Rename symbol / code action |
-| `grr` / `gri` / `grt` | References / implementation / type definition |
-| `gO` | Symbols in this file |
-| `<C-s>` | Signature help (insert mode) |
-| `]d` / `[d` / `<C-w>d` | Next / previous diagnostic / show it |
-| `gcc` / `gc` | Comment a line / a selection |
-| `an` / `in` | Grow / shrink the selection by syntax (visual mode) |
-| `]b` / `[b` | Next / previous open file |
-| `]q` / `[q` | Next / previous quickfix item |
-| `ZR` | Restart Neovim |
+Quitting saves the current state of the workspace (files and splits) for the 
+project folder; opening that folder again (`nvim ~/projects/ws`, 
+`<Space>o` or `<Space>fp`) brings them back. Quick edits 
+(`nvim somefile`) and plain `nvim` don't save anything. 
+Session files live in `~/.local/state/nvim/sessions/`
